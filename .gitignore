@@ -1,0 +1,13 @@
+*.b#?
+*.s#?
+*.GBL
+*.GBO
+*.GBP
+*.GBS
+*.GML
+*.gpi
+*.GTL
+*.GTO
+*.GTP
+*.GTS
+stepper cape.TXT
