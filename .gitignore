@@ -11,3 +11,7 @@
 *.GTP
 *.GTS
 stepper cape.TXT
+*.hex
+*.o
+*.elf
+*.eep
