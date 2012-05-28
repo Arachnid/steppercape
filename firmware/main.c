@@ -51,6 +51,10 @@ FUSES = {
 #define STEPPER1_MS0 PD2
 #define STEPPER1_MICROSTEP_MASK ((uint8_t)~(_BV(PD4) | _BV(PD3) | _BV(PD2)))
 
+#define PORT_INPUTS PORTA
+#define INPUT0 PA0
+#define INPUT1 PA1
+
 #define ENABLE_PWM_SETUP() (TCCR1A = 0, TCCR1B = _BV(WGM12), TIMSK |= _BV(TOIE1))
 
 typedef uint8_t (*register_write_handler)(uint8_t reg, uint8_t *value);
@@ -80,6 +84,13 @@ register_t EEMEM eeprom_registers = {
         .slave_addr = 0x26,
         .clk_flags = 0,
         .step_interval = 0,
+        .limit_flags = {
+			.s0_stop = 0,
+			.s1_stop = 0,
+			.reserved1 = 0,
+			.i0_invert = 0,
+			.i1_invert = 0,
+		},
         .microstep = 0,
         .buffer_free = BUFFER_CAPACITY,
         .buffer_append = 0
@@ -155,24 +166,30 @@ ISR(TIMER1_OVF_vect) {
 		registers.reg.buffer_free += buffer_nybble;
 		buffer_nybble ^= 1;
 		
-		if(data & 0x2) {
-			// Step instruction
-			copy_bit(data, 0, PORT_STEPPER0, STEPPER0_DIR);
-			PORT_STEPPER0 &= ~_BV(STEPPER0_EN);
-			PORT_STEPPER0 |= _BV(STEPPER0_STEP);
-		} else {
-			// Stop or disable instruction
-			copy_bit(~data, 0, PORT_STEPPER0, STEPPER0_EN);
+		uint8_t in0 = ((PORT_INPUTS & _BV(INPUT0)) != 0) ^ registers.reg.limit_flags.i0_invert;
+		uint8_t in1 = ((PORT_INPUTS & _BV(INPUT1)) != 0) ^ registers.reg.limit_flags.i1_invert;
+		if(!in0 || !registers.reg.limit_flags.s0_stop) {
+			if(data & 0x2) {
+				// Step instruction
+				copy_bit(data, 0, PORT_STEPPER0, STEPPER0_DIR);
+				PORT_STEPPER0 &= ~_BV(STEPPER0_EN);
+				PORT_STEPPER0 |= _BV(STEPPER0_STEP);
+			} else {
+				// Stop or disable instruction
+				copy_bit(~data, 0, PORT_STEPPER0, STEPPER0_EN);
+			}
 		}
 
-		if(data & 0x8) {
-			// Step instruction
-			copy_bit(data, 2, PORT_STEPPER1, STEPPER1_DIR);
-			PORT_STEPPER1 &= ~_BV(STEPPER1_EN);
-			PORT_STEPPER1 |= _BV(STEPPER1_STEP) | _BV(STEPPER1_EN);
-		} else {
-			// Stop or disable instruction
-			copy_bit(~data, 2, PORT_STEPPER1, STEPPER1_EN);
+		if(!in1 || !registers.reg.limit_flags.s1_stop) {
+			if(data & 0x8) {
+				// Step instruction
+				copy_bit(data, 2, PORT_STEPPER1, STEPPER1_DIR);
+				PORT_STEPPER1 &= ~_BV(STEPPER1_EN);
+				PORT_STEPPER1 |= _BV(STEPPER1_STEP) | _BV(STEPPER1_EN);
+			} else {
+				// Stop or disable instruction
+				copy_bit(~data, 2, PORT_STEPPER1, STEPPER1_EN);
+			}
 		}
 	} else {
 		// Buffer underrun! Stall!
@@ -189,6 +206,7 @@ const register_write_handler write_handlers[] = {
     write_clk_flags,
     write_noop,
     write_step_interval_msb,
+    write_noop,
     write_microstep,
     write_ignore,
     buffer_append,

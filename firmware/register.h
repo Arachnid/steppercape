@@ -28,6 +28,15 @@ typedef union {
         // [ -, -, STALL_STOP, -, CS12, CS11, CS10]
         uint8_t clk_flags;        // Timer enable and prescaler selection
         uint16_t step_interval;   // Timer steps per stepper step
+        // [ -, -, I1_INVERT, I0_INVERT, S1_I1_STOP, S1_I0_STOP, S0_I1_STOP, S0_I0_STOP]
+        struct {
+			unsigned int s0_stop : 1;
+			unsigned int s1_stop : 1;
+			unsigned int reserved1 : 2;
+			unsigned int i0_invert : 1;
+			unsigned int i1_invert : 1;
+		} limit_flags;
+        //uint8_t limit_flags;	  // Limit switch flags
         uint8_t microstep;		  // Microstep settings
         uint8_t buffer_free;	  // Free space in buffer
         uint8_t buffer_append;	  // Appends to the input buffer
