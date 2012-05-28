@@ -82,12 +82,14 @@ volatile uint8_t buffer_nybble = 0;
 register_t EEMEM eeprom_registers = {
     .reg = {
         .slave_addr = 0x26,
-        .clk_flags = 0,
+        .clk_flags = {
+			.stall_stop = 0,
+			.cs = 0,
+		},
         .step_interval = 0,
         .limit_flags = {
 			.s0_stop = 0,
 			.s1_stop = 0,
-			.reserved1 = 0,
 			.i0_invert = 0,
 			.i1_invert = 0,
 		},
@@ -123,6 +125,21 @@ uint8_t write_step_interval_msb(uint8_t reg, uint8_t *value) {
 	// Update counter max value
 	registers.bytes[reg] = *value;
 	OCR1A = registers.reg.step_interval;
+	return TRUE;
+}
+
+uint8_t write_limit_flags(uint8_t reg, uint8_t *value) {
+	registers.bytes[reg] = *value;
+	if(registers.reg.limit_flags.i0_pullup) {
+		PORT_INPUTS |= _BV(INPUT0);
+	} else {
+		PORT_INPUTS &= ~_BV(INPUT0);
+	}
+	if(registers.reg.limit_flags.i1_pullup) {
+		PORT_INPUTS |= _BV(INPUT1);
+	} else {
+		PORT_INPUTS &= ~_BV(INPUT1);
+	}
 	return TRUE;
 }
 
@@ -193,9 +210,9 @@ ISR(TIMER1_OVF_vect) {
 		}
 	} else {
 		// Buffer underrun! Stall!
-		if(registers.reg.clk_flags & _BV(STALL_STOP)) {
+		if(registers.reg.clk_flags.stall_stop) {
 			// Stop the timer when the buffer is empty
-			registers.reg.clk_flags &= 0xF8;
+			registers.reg.clk_flags.cs = 0;
 			TCCR1B &= 0xF8;
 		}
 	}
@@ -206,7 +223,7 @@ const register_write_handler write_handlers[] = {
     write_clk_flags,
     write_noop,
     write_step_interval_msb,
-    write_noop,
+    write_limit_flags,
     write_microstep,
     write_ignore,
     buffer_append,
