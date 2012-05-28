@@ -57,7 +57,7 @@ FUSES = {
 
 #define ENABLE_PWM_SETUP() (TCCR1A = 0, TCCR1B = _BV(WGM12), TIMSK |= _BV(TOIE1))
 
-typedef uint8_t (*register_write_handler)(uint8_t reg, uint8_t *value);
+typedef uint8_t (*register_write_handler)(uint8_t reg, uint8_t oldval);
 
 // Predefinitions of read/write handlers so we can reference them
 uint8_t i2c_read(uint8_t reg, volatile uint8_t *value);
@@ -93,7 +93,10 @@ register_t EEMEM eeprom_registers = {
 			.i0_invert = 0,
 			.i1_invert = 0,
 		},
-        .microstep = 0,
+        .microstep = {
+			.stepper0 = 0,
+			.stepper1 = 0,
+		},
         .buffer_free = BUFFER_CAPACITY,
         .buffer_append = 0
     }
@@ -101,35 +104,33 @@ register_t EEMEM eeprom_registers = {
 
 volatile uint8_t eeprom_dirty = FALSE;
 
-uint8_t write_noop(uint8_t reg, uint8_t *value) {
+uint8_t write_noop(uint8_t reg, uint8_t oldval) {
 	return TRUE;
 }
 
-uint8_t write_ignore(uint8_t reg, uint8_t *value) {
-	*value = registers.bytes[reg];
+uint8_t write_ignore(uint8_t reg, uint8_t oldval) {
+	registers.bytes[reg] = oldval;
 	return TRUE;
 }
 
-uint8_t write_slave_addr(uint8_t reg, uint8_t *value) {
-    usiTwiSlaveInit(*value, i2c_read, i2c_write);
+uint8_t write_slave_addr(uint8_t reg, uint8_t oldval) {
+    usiTwiSlaveInit(registers.reg.slave_addr, i2c_read, i2c_write);
 	return TRUE;
 }
 
-uint8_t write_clk_flags(uint8_t reg, uint8_t *value) {
+uint8_t write_clk_flags(uint8_t reg, uint8_t oldval) {
 	// Copy lower 3 bits to clock select flags
-	TCCR1B = (TCCR1B & 0xF8) | (*value & 0x7);
+	TCCR1B = (TCCR1B & 0xF8) | registers.reg.clk_flags.cs;
 	return TRUE;
 }
 
-uint8_t write_step_interval_msb(uint8_t reg, uint8_t *value) {
+uint8_t write_step_interval_msb(uint8_t reg, uint8_t oldval) {
 	// Update counter max value
-	registers.bytes[reg] = *value;
 	OCR1A = registers.reg.step_interval;
 	return TRUE;
 }
 
-uint8_t write_limit_flags(uint8_t reg, uint8_t *value) {
-	registers.bytes[reg] = *value;
+uint8_t write_limit_flags(uint8_t reg, uint8_t oldval) {
 	if(registers.reg.limit_flags.i0_pullup) {
 		PORT_INPUTS |= _BV(INPUT0);
 	} else {
@@ -143,20 +144,18 @@ uint8_t write_limit_flags(uint8_t reg, uint8_t *value) {
 	return TRUE;
 }
 
-uint8_t write_microstep(uint8_t reg, uint8_t *value) {
+uint8_t write_microstep(uint8_t reg, uint8_t oldval) {
 	// Update output pins with respective microstep settings
-	uint8_t stepper0_ms = *value & 0x7;
-	uint8_t stepper1_ms = (*value >> 4) & 0x7;
-	PORT_STEPPER0 = (PORT_STEPPER0 & STEPPER0_MICROSTEP_MASK) | (stepper0_ms << STEPPER0_MS0);
-	PORT_STEPPER1 = (PORT_STEPPER1 & STEPPER1_MICROSTEP_MASK) | (stepper1_ms << STEPPER1_MS0);
+	PORT_STEPPER0 = (PORT_STEPPER0 & STEPPER0_MICROSTEP_MASK) | registers.reg.microstep.stepper0;
+	PORT_STEPPER1 = (PORT_STEPPER1 & STEPPER1_MICROSTEP_MASK) | registers.reg.microstep.stepper1;
 	return TRUE;
 }
 
-uint8_t buffer_append(uint8_t reg, uint8_t *value) {
-	buffer[buffer_tail] = *value;
+uint8_t buffer_append(uint8_t reg, uint8_t oldval) {
+	buffer[buffer_tail] = registers.reg.buffer_append;
+	registers.reg.buffer_append = 0;
 	buffer_tail = (buffer_tail + 1) % BUFFER_CAPACITY;
 	registers.reg.buffer_free -= 1;
-	*value = 0;
 	// Only ack if the buffer is not full
 	return registers.reg.buffer_free;
 }
@@ -243,8 +242,9 @@ uint8_t i2c_write(uint8_t reg, uint8_t value) {
 	uint8_t ret = 1;
     if(reg < NUM_REGISTERS) {
 //		ret = ((register_write_handler)pgm_read_word_near(write_handlers + reg))(reg, &value);
-        ret = write_handlers[reg](reg, &value);
-        registers.bytes[reg] = value;
+		uint8_t oldval = registers.bytes[reg];
+		registers.bytes[reg] = value;
+        ret = write_handlers[reg](reg, oldval);
     } else if(reg == 127) {
         // Update eeprom (asynchronously, so we don't block the interrupt).
         eeprom_dirty = TRUE;
@@ -278,7 +278,7 @@ void read_registers(void) {
     // Run all the write funcs in order to initialize the device
     // But don't write to the buffer append register!
     for(int i = 0; i < NUM_REGISTERS - 1; i++)
-        write_handlers[i](i, &registers.bytes[i]);
+        write_handlers[i](i, registers.bytes[i]);
 
 	registers.reg.buffer_free = BUFFER_CAPACITY;
 }

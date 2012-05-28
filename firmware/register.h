@@ -38,7 +38,11 @@ typedef union {
 			unsigned int i0_pullup : 1;
 			unsigned int i1_pullup : 1;
 		} limit_flags;
-        uint8_t microstep;		  // Microstep settings
+		struct {
+			unsigned int stepper0 : 3;
+			unsigned int : 1;
+			unsigned int stepper1 : 3;
+		} microstep;			  // Microstep settings
         uint8_t buffer_free;	  // Free space in buffer
         uint8_t buffer_append;	  // Appends to the input buffer
     } __attribute__((__packed__)) reg;
