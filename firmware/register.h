@@ -25,14 +25,14 @@ typedef union {
         uint8_t slave_addr;		  // I2C slave address
         struct {
 			unsigned int cs : 3;
-			unsigned int padding1 : 1;
+			unsigned int : 1;
 			unsigned int stall_stop : 1;
 		} clk_flags;			  // Timer enable and prescaler selection
         uint16_t step_interval;   // Timer steps per stepper step
         struct {
 			unsigned int s0_stop : 1;
 			unsigned int s1_stop : 1;
-			unsigned int padding1 : 2;
+			unsigned int : 2;
 			unsigned int i0_invert : 1;
 			unsigned int i1_invert : 1;
 			unsigned int i0_pullup : 1;
