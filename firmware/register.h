@@ -17,7 +17,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#define NUM_REGISTERS 7
+#define NUM_REGISTERS 8
 
 typedef union {
     uint8_t bytes[NUM_REGISTERS];

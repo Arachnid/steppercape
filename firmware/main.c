@@ -55,7 +55,7 @@ FUSES = {
 #define INPUT0 PA0
 #define INPUT1 PA1
 
-#define ENABLE_PWM_SETUP() (TCCR1A = 0, TCCR1B = _BV(WGM12), TIMSK |= _BV(TOIE1))
+#define ENABLE_PWM_SETUP() (TCCR1A = 0, TCCR1B = _BV(WGM13) | _BV(WGM12), TIMSK |= _BV(ICIE1))
 
 typedef uint8_t (*register_write_handler)(uint8_t reg, uint8_t oldval);
 
@@ -126,7 +126,7 @@ uint8_t write_clk_flags(uint8_t reg, uint8_t oldval) {
 
 uint8_t write_step_interval_msb(uint8_t reg, uint8_t oldval) {
 	// Update counter max value
-	OCR1A = registers.reg.step_interval;
+	ICR1 = registers.reg.step_interval;
 	return TRUE;
 }
 
@@ -146,8 +146,8 @@ uint8_t write_limit_flags(uint8_t reg, uint8_t oldval) {
 
 uint8_t write_microstep(uint8_t reg, uint8_t oldval) {
 	// Update output pins with respective microstep settings
-	PORT_STEPPER0 = (PORT_STEPPER0 & STEPPER0_MICROSTEP_MASK) | registers.reg.microstep.stepper0;
-	PORT_STEPPER1 = (PORT_STEPPER1 & STEPPER1_MICROSTEP_MASK) | registers.reg.microstep.stepper1;
+	PORT_STEPPER0 = (PORT_STEPPER0 & STEPPER0_MICROSTEP_MASK) | registers.reg.microstep.stepper0 << STEPPER0_MS0;
+	PORT_STEPPER1 = (PORT_STEPPER1 & STEPPER1_MICROSTEP_MASK) | registers.reg.microstep.stepper1 << STEPPER0_MS0;
 	return TRUE;
 }
 
@@ -165,7 +165,7 @@ uint8_t buffer_append(uint8_t reg, uint8_t oldval) {
 // 10 = step back
 // 11 = step forward
 
-ISR(TIMER1_OVF_vect) {
+ISR(TIMER1_CAPT_vect) {
 	// Step pins low
 	PORT_STEPPER0 &= ~_BV(STEPPER0_STEP);
 	PORT_STEPPER1 &= ~_BV(STEPPER1_STEP);
@@ -213,6 +213,9 @@ ISR(TIMER1_OVF_vect) {
 			// Stop the timer when the buffer is empty
 			registers.reg.clk_flags.cs = 0;
 			TCCR1B &= 0xF8;
+			
+			PORT_STEPPER0 |= _BV(STEPPER0_EN);
+			PORT_STEPPER1 |= _BV(STEPPER1_EN);
 		}
 	}
 }

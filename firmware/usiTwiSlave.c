@@ -318,6 +318,7 @@ usiTwiSlaveInit(
 } // end usiTwiSlaveInit
 
 void usiTwiSlaveAck() {
+	PORT_USI |= _BV(PORT_USI_SCL); // Stop holding SCL low
 	switch(overflowState) {
     case USI_SLAVE_SEND_DATA:
 	  SET_USI_TO_SEND_DATA( );
@@ -462,8 +463,11 @@ ISR( USI_OVERFLOW_VECTOR )
     // copy data from buffer to USIDR and set USI to shift byte
     // next USI_SLAVE_REQUEST_REPLY_FROM_SEND_DATA
     case USI_SLAVE_SEND_DATA:
-      if(_onI2CReadFromRegister(currentRegister, &USIDR))
+      if(_onI2CReadFromRegister(currentRegister, &USIDR)) {
 		usiTwiSlaveAck();
+	  } else {
+		PORT_USI &= ~_BV(PORT_USI_SCL); // Hold SCL low until we're ready
+	  }
       currentRegister = NO_CURRENT_REGISTER_SET;
       break;
 
@@ -499,8 +503,11 @@ ISR( USI_OVERFLOW_VECTOR )
 	  else
 	  {
 	  	// We already have a register value, so it must be storing some data.
-	  	if(_onI2CWriteToRegister(currentRegister, USIDR))
-		  usiTwiSlaveAck();
+	  	if(_onI2CWriteToRegister(currentRegister, USIDR)) {
+			usiTwiSlaveAck();
+		} else {
+			PORT_USI &= ~_BV(PORT_USI_SCL); // Hold SCL low until we're ready
+		}
 
 		// Currently we only support writing a single value, so we assume that the
 		// transaction is over.
